@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mariadb-galera
+description: MariaDB Galera Cluster with Auto Bootstrap
+type: application
+version: 0.1.0
+appVersion: "10.11"

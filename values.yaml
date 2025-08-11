@@ -1,0 +1,43 @@
+replicaCount: 3
+
+image:
+  repository: mariadb
+  tag: "10.11"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3306
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+probes:
+  liveness:
+    exec:
+      command:
+        - sh
+        - -ec
+        - |
+          mysqladmin ping -h 127.0.0.1 -uroot -p${MARIADB_ROOT_PASSWORD} || exit 1
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+  readiness:
+    exec:
+      command:
+        - sh
+        - -ec
+        - |
+          mysql -uroot -p${MARIADB_ROOT_PASSWORD} -e "SHOW STATUS LIKE 'wsrep_local_state_comment'\G"             | grep -q "Synced"
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3

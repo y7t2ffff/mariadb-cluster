@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-galera-scripts
+data:
+  start-galera.sh: |
+    #!/bin/bash
+    set -e
+    DATA_DIR="/var/lib/mysql"
+    recover_seqno() {
+      mysqld --wsrep-recover 2>/tmp/wsrep_recover.out || true
+      cat /tmp/wsrep_recover.out | grep "Recovered position" | awk '{print $NF}' | awk -F: '{print $2}'
+    }
+    BOOTSTRAP="no"
+    MAX_SEQNO=-1
+    MY_SEQNO=$(recover_seqno)
+    for i in 0 1 2; do
+      HOST="mariadb-galera-$i.mariadb-galera"
+      if [ "$HOST" = "$(hostname -f)" ]; then
+        continue
+      fi
+      if ping -c1 $HOST &>/dev/null; then
+        SEQ=$(mysql -uroot -p${MARIADB_ROOT_PASSWORD} -h $HOST -e "SHOW GLOBAL STATUS LIKE 'wsrep_last_committed';" 2>/dev/null | awk '/wsrep_last_committed/ {print $2}' || echo -1)
+        if [ "$SEQ" -gt "$MAX_SEQNO" ]; then
+          MAX_SEQNO=$SEQ
+        fi
+      fi
+    done
+    if [ "$MY_SEQNO" -ge "$MAX_SEQNO" ]; then
+      BOOTSTRAP="yes"
+    fi
+    if [ "$BOOTSTRAP" = "yes" ]; then
+      echo "Starting as bootstrap node"
+      exec mysqld --wsrep-new-cluster
+    else
+      echo "Joining existing cluster"
+      exec mysqld
+    fi

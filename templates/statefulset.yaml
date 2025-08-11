@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mariadb-galera.fullname" . }}
+spec:
+  serviceName: {{ include "mariadb-galera.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "mariadb-galera.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "mariadb-galera.name" . }}
+    spec:
+      containers:
+        - name: mariadb
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /scripts/start-galera.sh
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secrets
+                  key: mariadb-root-password
+            - name: MARIADB_GALERA_CLUSTER_NAME
+              value: "galera-cluster"
+            - name: MARIADB_GALERA_CLUSTER_ADDRESS
+              value: "gcomm://mariadb-galera-0.mariadb-galera,mariadb-galera-1.mariadb-galera,mariadb-galera-2.mariadb-galera"
+          livenessProbe:
+            exec:
+              command: {{ toJson .Values.probes.liveness.exec.command }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command: {{ toJson .Values.probes.readiness.exec.command }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: mariadb-galera-scripts
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
